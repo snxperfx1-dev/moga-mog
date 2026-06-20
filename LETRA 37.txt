@@ -1,5 +1,5 @@
 //@version=6
-indicator("Letra 38", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500, max_polylines_count=100)
+indicator("Letra 39", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500, max_polylines_count=100)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — INPUT GROUPS
@@ -278,12 +278,14 @@ f_phys(simple int _atrL, simple int _effL, simple float _effT, simple float _dis
     [_atr, _vel, _acc, _cvx, _csm, _eff, _dsp, _bCS, _rCS, _bImp, _rImp, _bDec, _rDec, _bMic, _rMic, _vd70, _vd50, _vd85, _vd55x3, _mom, _accDec]
 
 // ── HTF MEMORY GUARD ─────────────────────────────────────────────────────────
-// On charts ABOVE H1 (H4 / Daily / Weekly …) a request.security() to a LOWER
-// timeframe pulls a massive intrabar count and blows the indicator's memory
-// limit. f_safeTF clamps any requested timeframe UP to the chart timeframe when
-// (and only when) the chart is above H1, so HTF charts request NO lower-TF data.
-// Intraday charts (<= H1) are untouched and keep full M1 / M3 / M5 granularity.
-bool _htfMemGuard = timeframe.in_seconds() > 3600
+// On charts at OR ABOVE H1 (H1 / H2 / H4 / Daily / Weekly …) a request.security()
+// to a LOWER timeframe pulls a massive intrabar count and blows the indicator's
+// memory limit. f_safeTF clamps any requested timeframe UP to the chart timeframe
+// when (and only when) the chart is at or above H1, so H1+ charts request NO
+// lower-TF data. Charts BELOW H1 are untouched and keep full M1 / M3 / M5 granularity.
+// NOTE: H1 is exactly 3600s, so the guard MUST use >= (not >) or H1 itself slips
+// through and still fires every sub-chart request (the original H1+ failure).
+bool _htfMemGuard = timeframe.in_seconds() >= 3600
 f_safeTF(simple string _tf) => _htfMemGuard and timeframe.in_seconds(_tf) < timeframe.in_seconds() ? timeframe.period : _tf
 
 [atr, velocity, acceleration, convexity, convSmooth, efficiency, displacement, bullConvShift, bearConvShift, bullImpulse, bearImpulse, bullMomDecay, bearMomDecay, bullMicroImpulse, bearMicroImpulse, phys_vd70, phys_vd50, phys_vd85, phys_vd55x3, phys_mom, phys_accDec] = request.security(syminfo.tickerid, f_safeTF("5"), f_phys(atrLen, effLen, effThresh, dispThresh, convMult), lookahead=barmerge.lookahead_off)
@@ -5361,8 +5363,8 @@ f_htfDir(float _open, float _high, float _low, float _close, float _effT, float 
     bool  _bearImp = _eff > _effT and _vel_htf < _vel_htf[1] and _acc_htf < 0 and _close < _open and _disp > _dispT
     _bullImp ? 1 : _bearImp ? -1 : 0
 
-dir_tf3_raw = request.security(syminfo.tickerid, mce_tf3, f_htfDir(open, high, low, close, effThresh, dispThresh, obLookback), lookahead=barmerge.lookahead_off)
-dir_tf4_raw = request.security(syminfo.tickerid, mce_tf4, f_htfDir(open, high, low, close, effThresh, dispThresh, obLookback), lookahead=barmerge.lookahead_off)
+dir_tf3_raw = request.security(syminfo.tickerid, f_safeTF(mce_tf3), f_htfDir(open, high, low, close, effThresh, dispThresh, obLookback), lookahead=barmerge.lookahead_off)
+dir_tf4_raw = request.security(syminfo.tickerid, f_safeTF(mce_tf4), f_htfDir(open, high, low, close, effThresh, dispThresh, obLookback), lookahead=barmerge.lookahead_off)
 
 // ── Display helper functions (global) ────────────────────────────────────────
 f_v72_px(float _v)  => na(_v) ? "–" : str.tostring(math.round_to_mintick(_v))
