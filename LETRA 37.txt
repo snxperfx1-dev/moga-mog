@@ -1,5 +1,5 @@
 //@version=6
-indicator("Letra 39", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500, max_polylines_count=100)
+indicator("Letra 40", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500, max_polylines_count=100)
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — INPUT GROUPS
@@ -277,16 +277,26 @@ f_phys(simple int _atrL, simple int _effL, simple float _effT, simple float _dis
     bool  _accDec = math.abs(_acc) < math.abs(_acc[1])
     [_atr, _vel, _acc, _cvx, _csm, _eff, _dsp, _bCS, _rCS, _bImp, _rImp, _bDec, _rDec, _bMic, _rMic, _vd70, _vd50, _vd85, _vd55x3, _mom, _accDec]
 
-// ── HTF MEMORY GUARD ─────────────────────────────────────────────────────────
-// On charts at OR ABOVE H1 (H1 / H2 / H4 / Daily / Weekly …) a request.security()
-// to a LOWER timeframe pulls a massive intrabar count and blows the indicator's
-// memory limit. f_safeTF clamps any requested timeframe UP to the chart timeframe
-// when (and only when) the chart is at or above H1, so H1+ charts request NO
-// lower-TF data. Charts BELOW H1 are untouched and keep full M1 / M3 / M5 granularity.
-// NOTE: H1 is exactly 3600s, so the guard MUST use >= (not >) or H1 itself slips
-// through and still fires every sub-chart request (the original H1+ failure).
-bool _htfMemGuard = timeframe.in_seconds() >= 3600
-f_safeTF(simple string _tf) => _htfMemGuard and timeframe.in_seconds(_tf) < timeframe.in_seconds() ? timeframe.period : _tf
+// ── HTF MEMORY GUARD (ratio-based — keep lower-TF context where it is cheap) ──
+// request.security() ALREADY stores a lower timeframe's latest reading and hands
+// it to the higher-TF chart — a single stored value costs nothing. The memory
+// wall is Pine RE-GRINDING the lower-TF history to produce that value, and that
+// cost scales with the gap (chartTF / requestedTF):
+//     M15 on H1  = 4x   (cheap — keep the real value)
+//     M1  on H1  = 60x  (heavy)
+//     M15 on D   = 96x  (heavy)
+//     M1  on D   = 1440x (fatal)
+// So we KEEP the real lower-TF value while the gap stays within maxLowerTFGap,
+// and only clamp UP to the chart TF when the gap is large enough to risk the
+// memory limit. Raise maxLowerTFGap if no memory error appears; lower it if one
+// does. Requests at or above the chart TF are always passed through untouched.
+maxLowerTFGap = input.int(24, "HTF: Max chart÷lower-TF gap before clamping",
+     group=GRP_MTF, minval=1, maxval=240,
+     tooltip="On H1+ charts, lower timeframes (M1/M3/M5/M15) keep their real values while the chart-to-layer ratio stays at or below this. Larger gaps clamp to the chart TF to protect the memory limit. Lower this if you hit a memory error; raise it to keep more lower-TF context.")
+f_safeTF(simple string _tf) =>
+    float _tfSec = timeframe.in_seconds(_tf)
+    float _chSec = timeframe.in_seconds()
+    (_tfSec < _chSec and _chSec / _tfSec > maxLowerTFGap) ? timeframe.period : _tf
 
 [atr, velocity, acceleration, convexity, convSmooth, efficiency, displacement, bullConvShift, bearConvShift, bullImpulse, bearImpulse, bullMomDecay, bearMomDecay, bullMicroImpulse, bearMicroImpulse, phys_vd70, phys_vd50, phys_vd85, phys_vd55x3, phys_mom, phys_accDec] = request.security(syminfo.tickerid, f_safeTF("5"), f_phys(atrLen, effLen, effThresh, dispThresh, convMult), lookahead=barmerge.lookahead_off)
 
